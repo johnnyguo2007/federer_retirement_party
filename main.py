@@ -114,6 +114,10 @@ class Player:
         self._score = score
         self._current_index = current_index
 
+    @property
+    def name(self):
+        return self._name
+
     def _check_boundary(self, delta):
         # todo
         return True
@@ -193,6 +197,8 @@ class Npc:
 
     def display(self):
         print(f"{self._name} is here!")
+        if self._found:
+            print(f"{self._name} is smiling: You can type 'ask question' if you want to ask me any question.")
 
     @property
     def found(self):
@@ -215,6 +221,10 @@ class Host:
         self._current_npc: Npc = None
         self._current_qa: Tuple = None
 
+    @property
+    def current_npc(self):
+        return self._current_npc
+
     def hint(self):
         if not self._task_issued:
             print("Host: You can 'Ask Task' to earn point.")
@@ -234,6 +244,7 @@ class Host:
         if ans.strip().lower() == self._current_qa[1]:
             print("Congratulations! You just finished a task")
             self._task_issued = False
+            self._current_npc.reset()
             return True
         else:
             print("Wrong answer!")
@@ -245,7 +256,8 @@ def display_court(court: Court, host: Host, list_of_npcs: List[Npc]):
     court.display()
     for npc in list_of_npcs:
         if npc.index == court.index:
-            npc.found = True
+            if host.current_npc.name == npc.name:
+                npc.found = True
             npc.display()
     if court.is_center_court():
         host.hint()
@@ -281,10 +293,12 @@ if __name__ == '__main__':
     player = Player(player_name, courts)
     display_court(player.current_court(), host, npcs)
     while not quit_the_game:
-        action: str = input(">>")
+        action: str = input(f"You have {player.score} points>>")
         action = action.strip().upper()
         if action in ["Q", "QUIT"]:
             quit_the_game = True
+            print(f"You have earned {player.score} points! Bye {player.name}")
+            break
         elif action in ["N", "S", "E", 'W']:
             player.move(action)
             display_court(player.current_court(), host, npcs)
@@ -297,3 +311,8 @@ if __name__ == '__main__':
             ans = input("Host: what is your answer")
             if host.check_answer(ans):
                 player.add_point()
+        elif action == "ASK QUESTION":
+            if player.current_court().index == host.current_npc.index:
+                ans = input(f"{host.current_npc.name}: what is the question?\n>>")
+            else:
+                print(f"You need to be at the same court as {host.current_npc.name} to ask question")

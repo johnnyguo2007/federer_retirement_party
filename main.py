@@ -2,6 +2,13 @@ from typing import Dict, List, Tuple
 import random
 
 """
+I'd like to use this game to celebrate Federer's retirement.
+
+Player can move around this K * K map.
+Player can "ask task" at center court and once completed the task the player will earn a point.
+To complete the task you need to find the Non-player Character(npc) first.
+After each around of task, the npc location is randomly reassigned. 
+
 Map: for dimension K=3 we have intuitive court label
 NW    N    NE
 
@@ -43,7 +50,7 @@ court_names = [
     "court S",
     "court SE",
     "court W",
-    "court C",
+    "Center Court",
     "court E",
     "court Nw",
     "court N",
@@ -51,15 +58,15 @@ court_names = [
 ]
 
 court_descriptions = [
-    "court SW: People are all dancing on the court",
-    "court S: People are all dancing on the court",
-    "court SE: An exhibition match is going on...",
-    "court W",
-    "The Host is playing Federer's 10 greatest matchs on the screen.",
-    "court E",
-    "court Nw",
-    "court N",
-    "court NE",
+    "People are all dancing on the court",
+    "People are all singing on the court",
+    "An exhibition match is going on...",
+    "People are enjoying the sunset view here",
+    "The Host is playing Federer's 10 greatest matches on the screen.",
+    "Ths place has a nice lake view",
+    "a Lot of players are chatting here",
+    "You can buy souvenir here...",
+    "A beautiful court with green grass",
 ]
 
 qa_for_federer = {
@@ -83,14 +90,36 @@ class Court:
                  court_description: str
                  ):
         self.court_name = court_name
-        self.index = index
+        self._index = index
         self.court_description = court_description
+
+    @property
+    def index(self):
+        return self._index
 
     def display(self):
         print(f"{self.court_name}\n{self.court_description}")
 
+    def coordinate_x(self):
+        return self._index % MAP_DIMENSION
+
+    def coordinate_y(self):
+        return int(self._index / MAP_DIMENSION)
+
     def is_center_court(self) -> bool:
-        return self.index == CENTER_COURT_INDEX
+        return self._index == CENTER_COURT_INDEX
+
+    def available_actions(self) -> List[str]:
+        action_list = []
+        if self.coordinate_x() > 0:
+            action_list.append("W")
+        if self.coordinate_x() < MAP_DIMENSION - 1:
+            action_list.append("E")
+        if self.coordinate_y() > 0:
+            action_list.append("S")
+        if self.coordinate_y() < MAP_DIMENSION - 1:
+            action_list.append("N")
+        return action_list
 
 
 class Player:
@@ -118,13 +147,9 @@ class Player:
     def name(self):
         return self._name
 
-    def _check_boundary(self, delta):
-        # todo
-        return True
-
     def move(self, direction: str) -> bool:
-        index_delta = Player.POS_CHANGE.get(direction)
-        if self._check_boundary(index_delta):
+        if direction in self.current_court().available_actions():
+            index_delta = Player.POS_CHANGE.get(direction)
             self._current_index += index_delta
             return True
         else:
@@ -133,15 +158,9 @@ class Player:
     def current_available_actions(self):
         pass
 
-    def coordinate_x(self):
-        return self._current_index % MAP_DIMENSION
-
-    def coordinate_y(self):
-        return int(self._current_index / MAP_DIMENSION)
-
     @property
     def score(self):
-        return
+        return self._score
 
     def add_point(self):
         self._score += 1
@@ -159,7 +178,7 @@ class Npc:
                  ):
         self._name = name
         self._index = index
-        self._q_a: Dict[str, str] = q_a
+        self._q_a = {k.lower(): v for k, v in q_a.items()}
         self._found = False
 
     @property
@@ -181,9 +200,14 @@ class Npc:
                 extra_q_a: Dict[str, str]):
         self._q_a.update(extra_q_a)
 
-    def answer_question(self, question: str) -> str:
-        return self._q_a.get(question.strip().lower(),
-                             "Sorry I don't know the answer to that question./n")
+    def answer_question(self, question: str) -> bool:
+        q = question.strip().lower()
+        if q in self._q_a.keys():
+            print(self._q_a.get(q))
+            return True
+        else:
+            print("Sorry I don't know the answer to that question.")
+            return False
 
     def get_radom_qa(self) -> Tuple:
         '''
@@ -210,7 +234,16 @@ class Npc:
 
     def reset(self):
         self._index = random.randint(0, INDEX_BOUND)
+        # make sure npc does not show up in center court
+        if self._index == CENTER_COURT_INDEX:
+            self._index -= 1
         self._found = False
+
+    def availabe_actions(self) -> List[str]:
+        aa = []
+        if self._found:
+            aa.append("ask question")
+            return aa
 
 
 class Host:
@@ -238,10 +271,15 @@ class Host:
         self._current_npc = self._npcs[random.randint(0, len(npcs) - 1)]
         self._current_qa = self._current_npc.get_radom_qa()
         self._task_issued = True
-        print(f"Please find {self._current_npc.name} and ask '{self._current_qa[0]}'")
+        print(f"Please find {self._current_npc.name} and ask '{self._current_qa[0]}' "
+              f"Please copy the question within the quotation mark")
+
+    @property
+    def task_issued(self) -> bool:
+        return self._task_issued
 
     def check_answer(self, ans: str):
-        if ans.strip().lower() == self._current_qa[1]:
+        if ans.strip().lower() == self._current_qa[1].lower():
             print("Congratulations! You just finished a task")
             self._task_issued = False
             self._current_npc.reset()
@@ -250,17 +288,52 @@ class Host:
             print("Wrong answer!")
             return False
 
+    def availabe_actions(self) -> List[str]:
+        aa = []
+        if self._task_issued:
+            if self.current_npc is not None and self.current_npc.found:
+                aa.append("Answer Task")
+        else:
+            aa.append("Ask Task")
+        return aa
+
 
 def display_court(court: Court, host: Host, list_of_npcs: List[Npc]):
     print("-----------------------------------------------------------------------------")
     court.display()
-    for npc in list_of_npcs:
-        if npc.index == court.index:
-            if host.current_npc.name == npc.name:
-                npc.found = True
-            npc.display()
     if court.is_center_court():
         host.hint()
+    else:
+        for npc in list_of_npcs:
+            if npc.index == court.index:
+                if host.task_issued:
+                    if host.current_npc.name == npc.name:
+                        npc.found = True
+                npc.display()
+
+
+def show_available_action(court: Court, host: Host, list_of_npcs: List[Npc]):
+    """
+    Unlike display_court, show_available_action will never npc state
+    :param court:
+    :param host:
+    :param list_of_npcs:
+    :return:
+    """
+    available_actions: List[str] = []
+    available_actions.extend(court.available_actions())
+    if court.is_center_court():
+        available_actions.extend(host.availabe_actions())
+    else:
+        for npc in list_of_npcs:
+            if npc.index == court.index:
+                if host.current_npc is not None:
+                    if host.current_npc.name == npc.name:
+                        if npc.availabe_actions() is not None:
+                            available_actions.extend(npc.availabe_actions())
+    print("-----------------------------------------------------------------------------")
+    print(f"Available actions are:", end=' ')
+    print(*available_actions, sep=", ")
     print("-----------------------------------------------------------------------------\n")
 
 
@@ -293,6 +366,7 @@ if __name__ == '__main__':
     player = Player(player_name, courts)
     display_court(player.current_court(), host, npcs)
     while not quit_the_game:
+        show_available_action(player.current_court(), host, npcs)
         action: str = input(f"You have {player.score} points>>")
         action = action.strip().upper()
         if action in ["Q", "QUIT"]:
@@ -300,7 +374,8 @@ if __name__ == '__main__':
             print(f"You have earned {player.score} points! Bye {player.name}")
             break
         elif action in ["N", "S", "E", 'W']:
-            player.move(action)
+            if not player.move(action):
+                print(f"You can no longer move {action}")
             display_court(player.current_court(), host, npcs)
         elif action == "ASK TASK":
             if player.current_court().is_center_court():
@@ -312,7 +387,13 @@ if __name__ == '__main__':
             if host.check_answer(ans):
                 player.add_point()
         elif action == "ASK QUESTION":
-            if player.current_court().index == host.current_npc.index:
-                ans = input(f"{host.current_npc.name}: what is the question?\n>>")
+            if player.current_court()._index == host.current_npc.index:
+                question = input(f"{host.current_npc.name}: what is the question?\n>>")
+                if host.current_npc.answer_question(question):
+                    print("Please bring back the answer to host at center court")
+                else:
+                    print("Please make sure you copied the question correctly")
+
             else:
                 print(f"You need to be at the same court as {host.current_npc.name} to ask question")
+

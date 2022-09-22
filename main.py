@@ -36,6 +36,7 @@ Also it means coordinates x and y has a one to one relationship to index
 # The dimension of the map need to be an odd number so we can have a balanced center court
 MAP_DIMENSION = 3
 INDEX_BOUND = MAP_DIMENSION * MAP_DIMENSION - 1
+CENTER_COURT_INDEX = int(INDEX_BOUND / 2)
 
 court_names = [
     "court SW",
@@ -88,6 +89,9 @@ class Court:
     def display(self):
         print(f"{self.court_name}\n{self.court_description}")
 
+    def is_center_court(self) -> bool:
+        return self.index == CENTER_COURT_INDEX
+
 
 class Player:
     # class variable, upper case indicate it is constant
@@ -103,7 +107,7 @@ class Player:
                  courts: List[Court],
                  score: int = 0,
                  # default at center court, MAP_DIMENSION has to be odd number
-                 current_index: int = int(INDEX_BOUND / 2),
+                 current_index: int = CENTER_COURT_INDEX,
                  ):
         self._name = name
         self._courts = courts
@@ -134,6 +138,9 @@ class Player:
     @property
     def score(self):
         return
+
+    def add_point(self):
+        self._score += 1
 
     def current_court(self) -> Court:
         return self._courts[self._current_index]
@@ -205,30 +212,43 @@ class Host:
                  npcs: List[Npc]):
         self._npcs = npcs
         self._task_issued = False
-        self._current_npc = None
-        self._current_qa = None
+        self._current_npc: Npc = None
+        self._current_qa: Tuple = None
 
     def hint(self):
         if not self._task_issued:
-            print("Host: You can 'Request Task' to earn point.")
-
+            print("Host: You can 'Ask Task' to earn point.")
+        elif not self._current_npc.found:
+            print(f"Host: You need to find {self._current_npc.name} first.")
+        else:
+            print(f"Good job finding {self._current_npc.name}, "
+                  f"Please type 'Answer task' if you like to start answering the question")
 
     def issue_task(self):
-        self._current_npc = self._npcs[random.randint(0, len(npcs)-1)]
-        #self._current_qa = self._current_npc.
+        self._current_npc = self._npcs[random.randint(0, len(npcs) - 1)]
+        self._current_qa = self._current_npc.get_radom_qa()
+        self._task_issued = True
+        print(f"Please find {self._current_npc.name} and ask '{self._current_qa[0]}'")
+
+    def check_answer(self, ans: str):
+        if ans.strip().lower() == self._current_qa[1]:
+            print("Congratulations! You just finished a task")
+            self._task_issued = False
+            return True
+        else:
+            print("Wrong answer!")
+            return False
 
 
-
-
-
-def display_court(court: Court, list_of_npcs: List[Npc]):
+def display_court(court: Court, host: Host, list_of_npcs: List[Npc]):
     print("-----------------------------------------------------------------------------")
     court.display()
     for npc in list_of_npcs:
         if npc.index == court.index:
-            npc.found()
+            npc.found = True
             npc.display()
-
+    if court.is_center_court():
+        host.hint()
     print("-----------------------------------------------------------------------------\n")
 
 
@@ -253,15 +273,27 @@ if __name__ == '__main__':
         Npc("Nadal", 3, qa_for_nadal),
     ]
 
+    host = Host(npcs)
+
     quit_the_game = False
 
     player_name = input("Welcome to Federer's retirement party, may I have your name please:.\n >>")
     player = Player(player_name, courts)
-    display_court(player.current_court(), npcs)
+    display_court(player.current_court(), host, npcs)
     while not quit_the_game:
         action: str = input(">>")
-        if action == "q":
+        action = action.strip().upper()
+        if action in ["Q", "QUIT"]:
             quit_the_game = True
-        else:
+        elif action in ["N", "S", "E", 'W']:
             player.move(action)
-            display_court(player.current_court(), npcs)
+            display_court(player.current_court(), host, npcs)
+        elif action == "ASK TASK":
+            if player.current_court().is_center_court():
+                host.issue_task()
+            else:
+                print("You can 'ask task' from host at center court")
+        elif action == "ANSWER TASK":
+            ans = input("Host: what is your answer")
+            if host.check_answer(ans):
+                player.add_point()
